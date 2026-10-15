@@ -1,6 +1,6 @@
 ---
 title: "Sync Operator"
-description: "Register a dedicated synchronizer and grant the traffic its members buy with Canton Coin"
+description: "Run a dedicated synchronizer whose members buy traffic with Canton Coin"
 ---
 
 import ExternalCantonMainDocsOpenTargetSnippetJsonDataSynchronizerHowtosOperateBootstrap57 from "/snippets/external/canton/main/docs-open/target/snippet_json_data/synchronizer/howtos/operate/bootstrap-57.mdx";
@@ -9,17 +9,17 @@ import ExternalCantonMainDocsOpenTargetSnippetJsonDataSynchronizerHowtosOperateB
 
 <div className="todo">
 
-Draft for ChainSafe/canton-extending-mainnet#37, with the admission write-up for #127, the outage runbook for #129 and the trust statement from #140. Describes the Splice release that ships the sync operator app and the `splice-sync-operator` chart; confirm that release, and check every claim against it, before publishing.
+Runbook for ChainSafe/canton-extending-mainnet#37, with the admission write-up for #127, the outage runbook for #129, the trust statement from #140, the upgrade runbook for #36, the multi-node layout for #106 and the migration for #100. Describes the Splice release that ships the sync operator app and the `splice-sync-operator` chart; confirm that release before publishing.
 
 </div>
 
-The sync operator is the organization that runs a dedicated synchronizer whose members [buy traffic with Canton Coin](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic). It runs the synchronizer, grants members the traffic they buy and admits new members. This page covers setting that up and running it.
+The sync operator is the organization that runs a dedicated synchronizer whose members [buy traffic with Canton Coin](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic). This page is its runbook: deploying the synchronizer and the sync operator app with Helm, registering the synchronizer, admitting validators, and running it day to day.
 
 ## Components
 
 A sync operator runs:
 
-- **The dedicated synchronizer's sequencer and mediator**, configured and bootstrapped as described in [Synchronizer Operations](/global-synchronizer/extension-synchronizers/synchronizer-operations). Traffic management needs a BFT sequencer.
+- **The dedicated synchronizer's sequencer and mediator**, from the `splice-global-domain` chart that SVs use for their nodes.
 - **A validator** on the Global Synchronizer. Its participant hosts the operator party, which observes every traffic purchase for the synchronizer.
 - **The sync operator app.** It reads those purchases through the participant's Ledger API, reads the Global Synchronizer's traffic parameters from Scan, and sets traffic limits and parameters through the sequencer's Admin API.
 
@@ -46,13 +46,19 @@ flowchart LR
 
 The sync operator app does not create the synchronizer. It serves the synchronizer that its configured sequencer belongs to.
 
+## Before you start
+
+- Deploy a validator as described in [Kubernetes Validator Deployment](/global-synchronizer/deployment/validator-kubernetes), in the `validator` namespace. This runbook installs everything else into the same namespace.
+- Use the same `CHART_VERSION` and release bundle (`splice-node`) as for the validator.
+- Create a client for the sync operator app in your IAM, the way you did for the validator app, and export its ID and secret as `SYNC_OPERATOR_CLIENT_ID` and `SYNC_OPERATOR_CLIENT_SECRET`.
+
 ## Set up
 
-Set up runs in this order: create the operator party, bootstrap the synchronizer, deploy the sync operator app, then register the synchronizer.
+Set up runs in this order: create the operator party, deploy the synchronizer's nodes, bootstrap the synchronizer, deploy the sync operator app, then register the synchronizer.
 
 ### Create the operator party
 
-The operator party is a party on your validator's participant, and the sync operator app acts as a Ledger API user whose primary party it is. Create both with an app instance on your validator. With the `splice-validator` Helm chart, add it through [ad-hoc configuration](/global-synchronizer/deployment/configuration#adding-ad-hoc-configuration):
+The operator party is a party on your validator's participant, and the sync operator app acts as a Ledger API user whose primary party it is. Have your validator create both as an app instance, through [ad-hoc configuration](/global-synchronizer/deployment/configuration#adding-ad-hoc-configuration) in its Helm values:
 
 ```yaml
 additionalEnvVars:
@@ -64,44 +70,157 @@ additionalEnvVars:
       }
 ```
 
-Replace `SYNC_OPERATOR_LEDGER_API_USER` with the user ID your IAM issues to the sync operator app, the same value as `ledger-api-user` in its [auth secret](#deploy-the-sync-operator-app). Once the validator has restarted, read the party ID in the Canton console:
+Replace `SYNC_OPERATOR_LEDGER_API_USER` with the user ID your IAM issues to the sync operator app, the same value as `ledger-api-user` in its [auth secret](#deploy-the-sync-operator-app), for example `${SYNC_OPERATOR_CLIENT_ID}@clients`. Upgrade the validator release with the new values. The validator logs the party it allocated:
 
-```scala
-participant.ledger_api.users.get("SYNC_OPERATOR_LEDGER_API_USER").primaryParty
+```bash
+kubectl logs -n validator deployment/validator-app | grep 'Setup app syncOperator'
 ```
+
+The `primary party` in that line is the operator party.
+
+### Deploy the synchronizer's nodes
+
+The sequencer and the mediator each use their own Postgres instance, as in the [SV deployment](/global-synchronizer/deployment/kubernetes-deployment). Create their password secrets and install them:
+
+```bash
+kubectl create secret generic sequencer-pg-secret \
+    --from-literal=postgresPassword=${POSTGRES_PASSWORD_SEQUENCER} \
+    -n validator
+kubectl create secret generic mediator-pg-secret \
+    --from-literal=postgresPassword=${POSTGRES_PASSWORD_MEDIATOR} \
+    -n validator
+helm install sequencer-pg oci://ghcr.io/digital-asset/decentralized-canton-sync/helm/splice-postgres -n validator --version ${CHART_VERSION} -f splice-node/examples/sv-helm/postgres-values-sequencer.yaml --wait
+helm install mediator-pg oci://ghcr.io/digital-asset/decentralized-canton-sync/helm/splice-postgres -n validator --version ${CHART_VERSION} -f splice-node/examples/sv-helm/postgres-values-mediator.yaml --wait
+```
+
+Create `dedicated-sync-values.yaml`. The `0` in the names is the synchronizer's serial, which goes up with each [upgrade](#upgrade-the-synchronizer):
+
+```yaml
+sequencer:
+  persistence:
+    host: sequencer-pg
+    port: 5432
+    secretName: sequencer-pg-secret
+    databaseName: sequencer_0
+  driver:
+    type: "cantonbft"
+    externalAddress: "dedicated-sync-0-sequencer"
+    externalPort: 5010
+    persistence:
+      databaseName: sequencer_cantonbft_0
+  additionalEnvVars:
+    - name: ADDITIONAL_CONFIG_AUTO_INIT
+      value: |
+        canton.sequencers.sequencer.init {
+          identity.type = auto
+          generate-topology-transactions-and-keys = true
+        }
+mediator:
+  persistence:
+    host: mediator-pg
+    port: 5432
+    secretName: mediator-pg-secret
+    databaseName: mediator_0
+  additionalEnvVars:
+    - name: ADDITIONAL_CONFIG_AUTO_INIT
+      value: |
+        canton.mediators.mediator.init {
+          identity.type = auto
+          generate-topology-transactions-and-keys = true
+        }
+```
+
+The sequencer runs on the Canton BFT orderer, as a single node with its own database. The `ADDITIONAL_CONFIG_AUTO_INIT` entries let both nodes create their own identities: the images wait for an SV app to do that otherwise. Install the chart:
+
+```bash
+helm install dedicated-sync-0 oci://ghcr.io/digital-asset/decentralized-canton-sync/helm/splice-global-domain -n validator --version ${CHART_VERSION} -f dedicated-sync-values.yaml --wait
+```
+
+This creates the services `dedicated-sync-0-sequencer`, with the public API on port 5008 and the Admin API on 5009, and `dedicated-sync-0-mediator`, with the Admin API on 5007. Expose the sequencer's public API to the validators that will join, for example through your ingress. Its URL is what you send them.
 
 ### Bootstrap the synchronizer
 
-1. [Bootstrap the synchronizer](/global-synchronizer/extension-synchronizers/synchronizer-operations#bootstrap-a-synchronizer) and connect the participants that should be members from the start.
-2. Make it [permissioned](/global-synchronizer/extension-synchronizers/synchronizer-operations#bootstrap-a-permissioned-synchronizer). Permission those participants first, then set `onboardingRestriction` to `RestrictedOpen`: the restriction deactivates every participant without a permission, including connected ones.
-3. [Enable traffic management](/global-synchronizer/extension-synchronizers/synchronizer-operations#enable-traffic-management-on-a-synchronizer) with no base traffic, so participants can only use traffic they buy:
+Bootstrap the synchronizer once, from a Canton console that reaches both nodes. Open one on the sequencer pod as described in [Access in a K8s cluster](/global-synchronizer/reference/canton-console-reference#access-in-a-k8s-cluster), with this `console.conf`:
 
-```scala
-import com.digitalasset.canton.config.RequireTypes.{NonNegativeNumeric, PositiveNumeric}
-import com.digitalasset.canton.config.PositiveFiniteDuration
-import com.digitalasset.canton.admin.api.client.data.TrafficControlParameters
-val trafficControlParameters = TrafficControlParameters(
-  enforceRateLimiting = true,
-  maxBaseTrafficAmount = NonNegativeNumeric.tryCreate(0L),
-  readVsWriteScalingFactor = PositiveNumeric.tryCreate(200),
-  maxBaseTrafficAccumulationDuration = PositiveFiniteDuration.ofMinutes(10L),
-  setBalanceRequestSubmissionWindowSize = PositiveFiniteDuration.ofMinutes(5L),
-  baseEventCost = NonNegativeNumeric.tryCreate(0L),
-  freeConfirmationResponses = false,
-)
-sequencer1.topology.synchronizer_parameters.propose_update(
-  synchronizerId = sequencer1.synchronizer_id,
-  _.update(trafficControl = Some(trafficControlParameters)),
-)
+```
+canton {
+  remote-sequencers {
+    sequencer {
+      public-api {
+        address = dedicated-sync-0-sequencer
+        port = 5008
+      }
+      admin-api {
+        address = dedicated-sync-0-sequencer
+        port = 5009
+      }
+    }
+  }
+  remote-mediators {
+    mediator {
+      admin-api {
+        address = dedicated-sync-0-mediator
+        port = 5007
+      }
+    }
+  }
+  features.enable-preview-commands = yes
+}
 ```
 
-The sync operator app then keeps the base traffic at zero, matches `readVsWriteScalingFactor` to the Global Synchronizer's and turns on free confirmation responses. It never turns traffic management on by itself, and waits at startup until it is on.
+Then run the following. It bootstraps the synchronizer with the sequencer as its owner, restricts onboarding to participants you permission, and turns on traffic management with no base traffic, last:
 
-Deploy the sync operator app right after this step. Until it runs, the mediator has no traffic either, so transactions on the synchronizer fail.
+```scala
+val synchronizerId = bootstrap.synchronizer(
+  synchronizerName = "dedicated",
+  sequencers = Seq(sequencer),
+  mediators = Seq(mediator),
+  synchronizerOwners = Seq(sequencer),
+  synchronizerThreshold = PositiveInt.one,
+  staticSynchronizerParameters = StaticSynchronizerParameters.defaultsWithoutKMS(ProtocolVersion.latest),
+).logical
+
+sequencer.topology.synchronizer_parameters.propose_update(
+  synchronizerId,
+  _.update(onboardingRestriction = OnboardingRestriction.RestrictedOpen),
+  signedBy = Some(sequencer.id.uid.namespace.fingerprint),
+)
+
+sequencer.topology.synchronizer_parameters.propose_update(
+  synchronizerId,
+  _.update(trafficControl =
+    Some(
+      TrafficControlParameters(
+        maxBaseTrafficAmount = NonNegativeLong.zero,
+        readVsWriteScalingFactor = PositiveInt.tryCreate(200),
+        maxBaseTrafficAccumulationDuration = PositiveFiniteDuration.ofMinutes(10),
+        setBalanceRequestSubmissionWindowSize = PositiveFiniteDuration.ofMinutes(5),
+        enforceRateLimiting = true,
+        baseEventCost = NonNegativeLong.zero,
+        freeConfirmationResponses = false,
+      )
+    )
+  ),
+  signedBy = Some(sequencer.id.uid.namespace.fingerprint),
+)
+
+utils.retry_until_true {
+  val parameters =
+    sequencer.topology.synchronizer_parameters.get_dynamic_synchronizer_parameters(synchronizerId)
+  parameters.onboardingRestriction == OnboardingRestriction.RestrictedOpen &&
+  parameters.trafficControl.isDefined
+}
+
+println(s"Synchronizer ID: ${sequencer.synchronizer_id}")
+```
+
+The last line prints the synchronizer ID, `dedicated::` followed by a fingerprint. You send it to the SVs and to the validators that join.
+
+Deploy the sync operator app right after this step. Until it runs, the mediator has no traffic either, so transactions on the synchronizer fail. The app keeps the base traffic at zero, matches `readVsWriteScalingFactor` to the Global Synchronizer's and turns on free confirmation responses. It never turns traffic management on by itself, and waits at startup until it is on.
 
 ### Deploy the sync operator app
 
-The sync operator app ships as the `splice-sync-operator` Helm chart. Install it in your validator's namespace, so it reaches the participant and Postgres under their default names, `participant` and `postgres`. It uses the `postgres-secrets` secret your validator uses and creates its own database.
+The sync operator app ships as the `splice-sync-operator` chart. In the `validator` namespace it reaches the participant and Postgres under their default names, `participant` and `postgres`, uses the `postgres-secrets` secret your validator uses, and creates its own database.
 
 Create a Ledger API auth secret for the operator user, the same way as the validator's:
 
@@ -121,7 +240,7 @@ Create `sync-operator-values.yaml`:
 # A Scan you host or trust, as for your validator
 scanAddress: "TRUSTED_SCAN_URL"
 # The dedicated synchronizer's sequencer
-sequencerAddress: "SEQUENCER_ADDRESS"
+sequencerAddress: "dedicated-sync-0-sequencer"
 metrics:
   enable: true
 ```
@@ -138,17 +257,11 @@ The app reports ready on `/api/syncoperator/readyz`, port 5016, once it has reac
 - gives the synchronizer's mediators unlimited traffic, since they cannot buy any;
 - sets each member's traffic limit on the sequencer to its total purchased traffic whenever a purchase lands.
 
-<div className="todo">
-
-Document the sequencer and mediator deployment once the chart for them is settled; the local run used the `splice-global-domain` chart with `sequencer.driver.type=cantonbft`, which needs automatic node initialization added through `additionalEnvVars`.
-
-</div>
-
 ### Register the synchronizer
 
 The SVs register the synchronizer by a governance vote. Send them:
 
-- the synchronizer ID, as `name::fingerprint`, which `sequencer1.synchronizer_id` prints in the Canton console;
+- the synchronizer ID from [Bootstrap the synchronizer](#bootstrap-the-synchronizer);
 - the operator party ID from [Create the operator party](#create-the-operator-party);
 - the traffic discount you have agreed with them, if any.
 
@@ -162,21 +275,21 @@ From then on, validators can buy traffic for the synchronizer, and the app grant
 
 ## Admit a validator
 
-The synchronizer admits only participants its owners have permissioned. To admit a validator:
+The synchronizer admits only participants its owner has permissioned. To admit a validator:
 
 1. The validator sends you its participant ID:
 
 <ExternalCantonMainDocsOpenTargetSnippetJsonDataSynchronizerHowtosOperateBootstrap57 />
 
-2. Import it on the node that holds the synchronizer's owner key, the sequencer if you bootstrapped with the sequencer as owner:
+2. Import it in your console on the sequencer, which holds the synchronizer's owner key:
 
 <ExternalCantonMainDocsOpenTargetSnippetJsonDataSynchronizerHowtosOperateBootstrap58 />
 
-3. Permission it from that node. On a synchronizer with several owners, enough owners to reach the threshold must do this:
+3. Permission it from the sequencer. On a synchronizer with several owners, enough owners to reach the threshold must do this:
 
 <ExternalCantonMainDocsOpenTargetSnippetJsonDataSynchronizerHowtosOperateBootstrap59 />
 
-4. Send the validator the URL of the sequencer's public API. It then joins as described in [Join a dedicated synchronizer](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic#join-a-dedicated-synchronizer).
+4. Send the validator the URL of the sequencer's public API and the synchronizer ID. It then joins as described in [Join a dedicated synchronizer](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic#join-a-dedicated-synchronizer).
 
 The new member starts with no traffic. It can transact once it has bought traffic and the app has granted it.
 
@@ -187,11 +300,7 @@ The sync operator app exposes [metrics](/global-synchronizer/production-operatio
 - **Grants.** The reconcile trigger, `trigger_name="ReconcileDedicatedSequencerTrafficTrigger"`, reports `splice_trigger_latency_duration_seconds` for how long a grant takes and `splice_trigger_completed_total` for grants by `outcome`. The Automations dashboard shows both, and the Automation Failures alert fires when grants fail.
 - **Member traffic.** On the sequencer, `daml_sequencer_traffic_control_extra_traffic_purchased` per `member` is the limit the app has set, and `daml_sequencer_traffic_control_extra_traffic_consumed` is what the member has used. The Synchronizer Fees (SV View) dashboard shows both.
 
-<div className="todo">
-
-The issue also asks for the trigger's iteration metric, `splice_trigger_iterations_total`. Only polling triggers report it, so it applies once the reconcile trigger polls (canton-network/splice-multi-sync#71). Decide where sync operators get the dashboards: the validator bundle does not carry Synchronizer Fees (SV View).
-
-</div>
+Import the [Grafana dashboards](/global-synchronizer/production-operations/splice-metrics-overview#grafana-dashboards) from the release bundle: Automations from `validator-grafana-dashboards/`, and Synchronizer Fees (SV View) from `sv-grafana-dashboards/`.
 
 ## Trust
 
@@ -199,16 +308,75 @@ The sequencer applies whatever traffic limit the operator sets. Nothing checks t
 
 ## Upgrade the synchronizer
 
-The sync operator upgrades its synchronizer with a [logical synchronizer upgrade](/global-synchronizer/production-operations/logical-synchronizer-upgrade) on its own schedule, without an SV vote. Purchased traffic carries over to the successor.
+The sync operator upgrades its synchronizer with a [logical synchronizer upgrade](/global-synchronizer/production-operations/logical-synchronizer-upgrade) on its own schedule, without an SV vote. Participants move to the new nodes by themselves, and purchased traffic carries over.
 
-1. Deploy the successor sequencer and mediator next to the current ones.
-2. Add them to the sync operator app's configuration under `synchronizer-nodes.successor`: the sequencer's Admin API, its `internal-api` for the mediator and its `external-public-api-url` for participants, the mediator's Admin API, and the successor's `protocol-version` and `serial`. Add the current mediator's Admin API under `synchronizer-nodes.current.mediator`. Set `lsu-dump-path`, where the app writes the current synchronizer's state, and the schedule under `lsu`: `topology-freeze-time`, `upgrade-time`, `new-physical-synchronizer-serial` and `new-physical-synchronizer-protocol-version`. Restart the app.
-3. At the topology freeze time the app announces the upgrade and prepares the successor nodes. At the upgrade time participants move to the successor, and the app transfers the traffic state to it.
-4. Once the upgrade is done, point `synchronizer-nodes.current` at the successor nodes and remove `successor` and `lsu`.
+1. **Deploy the successor nodes.** Install a second `splice-global-domain` release, `dedicated-sync-1`, from a copy of `dedicated-sync-values.yaml` with the serial in the database names and in `externalAddress` changed from `0` to `1`, and without the two `ADDITIONAL_CONFIG_AUTO_INIT` entries: the app initializes the successor nodes from the current ones. Expose its public API to the validators, as for the current nodes.
+2. **Schedule the upgrade.** Create `sync-operator-lsu-values.yaml`. Pick a topology freeze time and an upgrade time, in UTC, for example `2026-11-20T10:00:00Z`: from the freeze time until the upgrade, no topology changes are possible, so you cannot admit validators. The new serial is the current one plus one. The protocol version can stay the same or go up:
+
+   ```yaml
+   # The app writes the current synchronizer's state here during the upgrade.
+   pvc:
+     size: 1Gi
+     volumeStorageClass: standard-rwo
+   additionalEnvVars:
+     - name: ADDITIONAL_CONFIG_LSU
+       value: |
+         canton.sync-operator-apps.sync-operator {
+           synchronizer-nodes {
+             current.mediator.admin-api {
+               address = "dedicated-sync-0-mediator"
+               port = 5007
+             }
+             successor {
+               sequencer {
+                 admin-api {
+                   address = "dedicated-sync-1-sequencer"
+                   port = 5009
+                 }
+                 internal-api {
+                   address = "dedicated-sync-1-sequencer"
+                   port = 5008
+                 }
+                 external-public-api-url = "SUCCESSOR_SEQUENCER_PUBLIC_URL"
+               }
+               mediator.admin-api {
+                 address = "dedicated-sync-1-mediator"
+                 port = 5007
+               }
+               protocol-version = "NEW_PROTOCOL_VERSION"
+               serial = 1
+             }
+           }
+           lsu-dump-path = "/persistent-data/lsu-dump.json"
+           lsu {
+             topology-freeze-time {
+               type = "timestamp"
+               time = "TOPOLOGY_FREEZE_TIME"
+             }
+             upgrade-time {
+               type = "timestamp"
+               time = "UPGRADE_TIME"
+             }
+             new-physical-synchronizer-serial = 1
+             new-physical-synchronizer-protocol-version = "NEW_PROTOCOL_VERSION"
+           }
+         }
+   ```
+
+   `SUCCESSOR_SEQUENCER_PUBLIC_URL` is the URL validators reach the new sequencer on. Apply it:
+
+   ```bash
+   helm upgrade sync-operator oci://ghcr.io/digital-asset/decentralized-canton-sync/helm/splice-sync-operator -n validator --version ${CHART_VERSION} -f sync-operator-values.yaml -f sync-operator-lsu-values.yaml --wait
+   ```
+
+3. **Let it run.** At the topology freeze time, the app announces the upgrade and prepares the successor nodes from the current ones. At the upgrade time, participants connect to the successor, and the app moves the traffic state to it.
+4. **Switch over.** After the upgrade time, set `sequencerAddress: "dedicated-sync-1-sequencer"` in `sync-operator-values.yaml` and upgrade the release without `sync-operator-lsu-values.yaml`. The app refuses to start while it points at the old nodes without a successor configured. Uninstall `dedicated-sync-0` once every member's participant has moved to the successor.
+
+To cancel before the topology freeze time, upgrade the release without `sync-operator-lsu-values.yaml`; nothing has been announced yet.
 
 <div className="todo">
 
-Add a tested configuration example and say how to cancel a scheduled upgrade; the operator has no equivalent of the SV cancel endpoint (ChainSafe/canton-extending-mainnet#36).
+The upgrade is tested with the database sequencer (`SyncOperatorLsuIntegrationTest`), not yet with the BFT orderer the chart runs; run it once on a test cluster before publishing. Cancelling after the topology freeze time means revoking the announcement on the sequencer (`sequencer.topology.lsu.announcement.revoke`); the operator has no endpoint like the SVs' `/v0/admin/synchronizer/lsu/cancel`, and that path is not tested yet.
 
 </div>
 
@@ -237,27 +405,73 @@ additionalEnvVars:
 
 Members can also hold more traffic in reserve; see [When the Global Synchronizer is unavailable](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic#when-the-global-synchronizer-is-unavailable).
 
-## Run the synchronizer with several operators
+## Run the synchronizer on several nodes
 
-A dedicated synchronizer can be run by several organizations, each with its own sequencer and mediator, as a [decentralized synchronizer](/global-synchronizer/extension-synchronizers/synchronizer-operations#set-up-a-decentralized-synchronizer). Each organization runs its own sync operator app against its own sequencer. A traffic limit only changes once a threshold of sequencers, the `threshold` of the `SequencerSynchronizerState` mapping, has submitted the same value, so every operator must run the app.
+For fault tolerance, run the synchronizer on several sequencer and mediator nodes, as a [decentralized synchronizer](/global-synchronizer/extension-synchronizers/synchronizer-operations#set-up-a-decentralized-synchronizer). The tested layout has four nodes:
+
+- Every sequencer lists the other three as peers of its BFT orderer.
+- All four sequencers own the synchronizer, and three of them must sign each topology change.
+- Each mediator connects to its own node's sequencer, and two mediators must agree.
+- The sequencer threshold goes from 1 to 2, so a traffic limit changes only once two sequencers have submitted the same value.
+- Each sequencer has its own sync operator app, with its own database, all acting as the registered operator party.
+
+Bootstrap the four nodes from one console that reaches all of them, named `sequencer1` to `sequencer4` and `mediator1` to `mediator4`:
+
+```scala
+val sequencers = Seq(sequencer1, sequencer2, sequencer3, sequencer4)
+val mediators = Seq(mediator1, mediator2, mediator3, mediator4)
+val owners = sequencers.take(3)
+
+val synchronizerId = bootstrap.synchronizer(
+  synchronizerName = "dedicated",
+  sequencers = sequencers,
+  mediatorsToSequencers = mediators
+    .zip(sequencers)
+    .map { case (mediator, sequencer) =>
+      mediator -> (Seq(sequencer), PositiveInt.one, NonNegativeInt.zero)
+    }
+    .toMap,
+  synchronizerOwners = sequencers,
+  synchronizerThreshold = PositiveInt.tryCreate(3),
+  staticSynchronizerParameters = StaticSynchronizerParameters.defaultsWithoutKMS(ProtocolVersion.latest),
+  mediatorRequestAmplification = SubmissionRequestAmplification.NoAmplification,
+  mediatorThreshold = PositiveInt.tryCreate(2),
+).logical
+
+owners.foreach(owner =>
+  owner.topology.sequencers.propose(
+    synchronizerId,
+    threshold = PositiveInt.tryCreate(2),
+    active = sequencers.map(_.id),
+    signedBy = Some(owner.id.uid.namespace.fingerprint),
+    synchronize = None,
+  )
+)
+```
+
+Then restrict onboarding and turn on traffic management as in [Bootstrap the synchronizer](#bootstrap-the-synchronizer), with each of the three `owners` proposing each change.
+
+With the charts, each node is its own `splice-global-domain` release. The chart starts the BFT orderer with no peers, so add each sequencer's peers in a `sequencer.additionalEnvVars` entry whose name sorts after the chart's `ADDITIONAL_CONFIG_SEQUENCER_DRIVER_BFT`, for example `ADDITIONAL_CONFIG_SEQUENCER_PEERS` setting `canton.sequencers.sequencer.sequencer.config.initial-network.peer-endpoints`, and set `driver.externalAddress` and `driver.externalPort` to where the other nodes reach it. Install one `splice-sync-operator` release per node, each in its own namespace since the chart's resource names are fixed, with `sequencerAddress` set to that node's sequencer and `participantAddress` to your participant's service in the `validator` namespace.
 
 <div className="todo">
 
-ChainSafe/canton-extending-mainnet#106: settle with DA how the registered operator party is shared across organizations, which keys own the synchronizer, and who leads upgrades. Then document the layout and bootstrap.
+The four-node layout is tested as plain Canton config (`SyncOperatorBftIntegrationTest`), not with the charts. Several organizations, one node each, sharing the registered operator party, is the target in ChainSafe/canton-extending-mainnet#106 and waits on DA: who owns the synchronizer's keys and the shared party, and who leads upgrades.
 
 </div>
 
 ## Bring an existing synchronizer onto paid traffic
 
-A dedicated synchronizer that already runs without paid traffic can move onto it in place. Follow this order so no member loses access at the switch:
+A dedicated synchronizer that already runs without paid traffic moves onto it in place, without a rebuild. In this order:
 
-1. Register the synchronizer by vote, as in [Register the synchronizer](#register-the-synchronizer).
-2. Restrict onboarding, permissioning the participants already connected first.
-3. Have every member buy traffic for the synchronizer.
-4. Switch to paid traffic last, since that is the step that stops anyone without purchased traffic.
+1. **Register** the synchronizer by vote, as in [Register the synchronizer](#register-the-synchronizer).
+2. **Restrict onboarding** if it is open: permission every participant already connected, as in [Admit a validator](#admit-a-validator), then set `onboardingRestriction` to `RestrictedOpen` as in [Bootstrap the synchronizer](#bootstrap-the-synchronizer). The restriction deactivates any participant without a permission, connected or not.
+3. **Have every member buy traffic** for the synchronizer.
+4. **Switch to paid traffic** last, since that is the step that stops anyone without purchased traffic. Deploy the sync operator app, then turn on traffic management if it is off, as in [Bootstrap the synchronizer](#bootstrap-the-synchronizer). The app waits for traffic management, then grants each member its purchased total and sets the base traffic to zero.
+
+If traffic management was already on with limits you set by hand, the app does not lower them. It raises a member's limit only once the member's purchased total is higher, so members keep their current limits until their purchases catch up.
 
 <div className="todo">
 
-ChainSafe/canton-extending-mainnet#100: spell out step 4 with the sync operator app, which sets the base traffic to zero as soon as it starts. Decide the case where members have already used more traffic than any purchase covers, then test the migration.
+ChainSafe/canton-extending-mainnet#100: decide whether hand-set limits stay until purchases catch up, as the app does today, or members pay from the switch. canton-network/splice-multi-sync#71 makes the trigger set limits to the purchased total in both directions, which would refuse members whose consumption is ahead of their purchases. Then test the migration on LocalNet.
 
 </div>

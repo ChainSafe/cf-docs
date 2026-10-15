@@ -53,7 +53,7 @@ The operator's mediators have unlimited traffic, since they cannot buy any. Othe
 
 A registered dedicated synchronizer is permissioned, and a new member has no traffic on it. Connecting already costs traffic, because the participant sends its parties and package vetting to the synchronizer when it connects. So a validator joins in this order:
 
-1. **Ask the operator for access.** Send your participant ID to the operator. The operator permissions it and sends you the URL of the synchronizer's sequencer.
+1. **Ask the operator for access.** Send your participant ID to the operator. The operator permissions it and sends you the URL of the synchronizer's sequencer and the synchronizer ID.
 2. **Register the connection.** Register the synchronizer with a handshake but do not connect yet. The handshake makes your participant a member of the synchronizer and costs no traffic. For example, in the Canton console:
 
    ```scala
@@ -73,11 +73,11 @@ A registered dedicated synchronizer is permissioned, and a new member has no tra
    participant.synchronizers.reconnect("dedicated")
    ```
 
-   To stay connected and topped up, add the synchronizer to your validator's configuration as shown in [Automatic top-ups](#automatic-top-ups).
+   To stay connected and topped up, then add the synchronizer to your validator's configuration as shown in [Automatic top-ups](#automatic-top-ups). Add it only after this first purchase is granted: the validator app connects to every synchronizer in `extraDomains` when it starts, and connecting needs traffic.
 
 <div className="todo">
 
-Simplify once a purchase made before a participant joins is granted when it joins (ChainSafe/canton-extending-mainnet#116, canton-network/splice-multi-sync#71); the order then becomes buy, then connect. Confirm whether a validator that lists the synchronizer in `domains.extra` before it has traffic there blocks at startup, since the validator app connects to every synchronizer in `domains.extra` when it starts. Run both console snippets against the release.
+Simplify once a purchase made before a participant joins is granted when it joins (ChainSafe/canton-extending-mainnet#116, canton-network/splice-multi-sync#71); the order then becomes buy, then connect.
 
 </div>
 
