@@ -464,11 +464,13 @@
             "group": "Dedicated Synchronizers",
             "pages": [
               "global-synchronizer/extension-synchronizers/dedicated-synchronizers",
+              "global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic",
               "global-synchronizer/extension-synchronizers/hybrid-synchronizer-pattern",
               "global-synchronizer/extension-synchronizers/linking-validator-multi-sync",
               "global-synchronizer/extension-synchronizers/private-validators",
               "global-synchronizer/extension-synchronizers/synchronizer-operations",
-              "global-synchronizer/extension-synchronizers/synchronizer-monitoring"
+              "global-synchronizer/extension-synchronizers/synchronizer-monitoring",
+              "global-synchronizer/extension-synchronizers/sync-operator"
             ]
           },
           {

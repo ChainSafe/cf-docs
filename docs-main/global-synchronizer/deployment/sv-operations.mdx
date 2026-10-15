@@ -144,6 +144,26 @@ double-minting of rewards occurs.
 For details on how traffic-based rewards work, see
 [Traffic-Based App Rewards](/global-synchronizer/splice-fundamentals/traffic-based-app-rewards).
 
+## Registering a dedicated synchronizer
+
+Validators can buy traffic for a dedicated synchronizer with CC once the SVs have registered it; see [Dedicated Synchronizer Traffic](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic).
+
+<div className="todo">
+
+Draft for ChainSafe/canton-extending-mainnet#37. Confirm the Splice release that ships these vote actions before publishing.
+
+</div>
+
+The following steps are required to register a dedicated synchronizer:
+
+1.  Receive from the synchronizer's operator its synchronizer ID and operator party ID, and agree among the SVs on a traffic discount, if any.
+2.  Start a governance vote. To do so, create a new vote request in the SV web UI under the `Governance` tab. Select the "Register Dedicated Synchronizer" name, then enter the synchronizer ID, the operator party as the synchronizer operator, and the traffic discount: the factor that multiplies the synchronizer's traffic price, greater than 0 and at most 1, where 1 is the full price. The form refuses a synchronizer ID that is already registered.
+3.  Wait for the vote request to get approved and executed. Once that happens, Scan serves the registration at `/v0/synchronizers/{synchronizer_id}/registration`, and validators can buy traffic for the synchronizer.
+
+To change the discount later, vote with "Set Dedicated Synchronizer Parameters". To stop purchases for a synchronizer, vote with "Offboard Dedicated Synchronizer", which archives its registration. Traffic already granted on the synchronizer is not affected.
+
+A synchronizer in `requiredSynchronizers`, such as the Global Synchronizer itself, cannot be bought for through a registration, so it never gets a discount.
+
 ## Determining good [synchronizer traffic parameters](/global-synchronizer/deployment/synchronizer-traffic)
 
 SVs are responsible for deciding on suitable synchronizer traffic parameters. In the following we describe ways for determining good values for some of these parameters.
