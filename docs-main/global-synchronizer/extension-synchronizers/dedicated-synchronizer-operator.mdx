@@ -402,7 +402,7 @@ The upgrade is tested with the database sequencer (`SyncOperatorLsuIntegrationTe
 
 <div className="todo">
 
-Requires the outage traffic allowance, canton-network/splice-multi-sync#71 and #80 (ChainSafe/canton-extending-mainnet#129). Do not publish before it ships. If it misses the release, also remove the last sentence of [Trust](#trust) and the outage paragraph on the Dedicated Synchronizer Traffic page.
+Requires the outage traffic allowance, canton-network/splice-multi-sync#71 (ChainSafe/canton-extending-mainnet#129). Do not publish before it ships. If it misses the release, also remove the last sentence of [Trust](#trust) and the outage paragraph on the Dedicated Synchronizer Traffic page.
 
 </div>
 
@@ -410,7 +410,7 @@ While the Global Synchronizer is unavailable, nobody can buy traffic, and each m
 
 - **Setting it.** Add `outage-traffic-allowance`, in bytes per participant, to the sync operator app's configuration and restart the app. The app only starts once its Scan is reachable; if yours is down, point `scanAddress` at another SV's Scan. Each participant's limit becomes its purchased total, or 0 if it has none, plus the allowance. That includes participants that join while it is set, so keep onboarding restricted. Size it from the members' traffic rates and how long the outage may last: your exposure is the allowance times the number of participants. Setting a smaller value and restarting lowers the limits again.
 - **While it is set.** Each participant keeps the full allowance on top of what it has bought, including purchases made once the Global Synchronizer is back. The app does not warn while it is set, so watching for the Global Synchronizer's return is up to you.
-- **Removing it.** Once the Global Synchronizer is back, remove the setting and restart the app, optionally after a grace period so members can buy back what they used before their limits drop. Each limit goes back to the purchased total. A participant that used the allowance is refused until its purchases cover what it used.
+- **Removing it.** Once the Global Synchronizer is back, remove the setting and restart the app, optionally after a grace period so members can buy back what they used before their limits drop. Each limit goes back to the purchased total. A participant that used the allowance is refused until its purchases cover what it used. Its validator's top-ups stay within their configured limits, so tell your members how to recover sooner; see [When the Global Synchronizer is unavailable](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic#when-the-global-synchronizer-is-unavailable).
 - **Several operators.** Every operator sets, and later removes, the same value at about the same time. While their settings differ, limits only stay stable with a sequencer threshold above half the sequencers, for example 3 of 4.
 
 With the `splice-sync-operator` chart, set it through ad-hoc configuration, in the same `additionalEnvVars` list as the app's other entries:
