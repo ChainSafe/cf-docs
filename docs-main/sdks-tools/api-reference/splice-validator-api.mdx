@@ -70,6 +70,8 @@ Any user can buy traffic for any validator. Buying traffic is a multi-step proce
 | **POST** /v0/wallet/buy-traffic-requests                      | Create a request to buy traffic           |
 | **POST** /v0/wallet/buy-traffic-requests/`{tracking_id}`/status | Check the status of a buy traffic request |
 
+The same requests buy traffic on a registered dedicated synchronizer when `domain_id` is that synchronizer's ID. See [Dedicated Synchronizer Traffic](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic).
+
 ## Internal user wallet API
 
 These endpoints are used internally by the frontend of the Splice Wallet to interact with a user Canton Coin holdings.
@@ -229,6 +231,7 @@ If the validator app is part of a `CN Supervalidator` node, then each call to on
 | **GET** /v0/scan-proxy/transfer-command-counter/`{party}`      |
 | **GET** /v0/scan-proxy/transfer-command/status               |
 | **GET** /v0/scan-proxy/transfer-preapprovals/by-party/`{party}` |
+| **GET** /v0/scan-proxy/synchronizers/`{synchronizer_id}`/registration |
 
 
 {/* COPIED_END */}

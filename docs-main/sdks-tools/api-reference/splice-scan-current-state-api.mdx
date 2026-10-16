@@ -9,7 +9,7 @@ Alongside information about the [overall Splice network operations](/sdks-tools/
 
 ## Validator Traffic Credits and Purchases
 
-Sequencing messages on the global synchronizer, which is an integral part of the Canton commit protocol for Daml transactions and validator operations more generally, costs [traffic fees](/global-synchronizer/deployment/synchronizer-traffic) purchased in Amulet. /v0/domains/{domain_id}/members/{member_id}/traffic-status can be used to query the purchased and spent traffic credit.
+Sequencing messages on the global synchronizer, which is an integral part of the Canton commit protocol for Daml transactions and validator operations more generally, costs [traffic fees](/global-synchronizer/deployment/synchronizer-traffic) purchased in Amulet. `/v0/domains/{domain_id}/members/{member_id}/traffic-status` can be used to query the purchased and spent traffic credit.
 
 Here's an example response from querying for a member participant.
 
@@ -28,6 +28,8 @@ Here's an example response from querying for a member participant.
 ```
 
 `total_limit` is the most important statistic; `total_purchased` is usually the same, but may be higher if a purchase is still in process.
+
+The traffic status endpoint serves the global synchronizer only, and rejects a dedicated synchronizer's ID with a 400. For a dedicated synchronizer, `/v0/synchronizers/{synchronizer_id}/registration` returns its registration, which shows that its traffic can be bought with Amulet, or a 404 if it is not registered. Its operator holds its traffic state; see [Dedicated Synchronizer Traffic](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic).
 
 ## Open Mining Rounds
 
