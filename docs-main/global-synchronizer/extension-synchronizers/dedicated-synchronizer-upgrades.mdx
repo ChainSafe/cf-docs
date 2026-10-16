@@ -1,0 +1,83 @@
+---
+title: "Dedicated Synchronizer Upgrades"
+description: "Upgrade a dedicated synchronizer with a logical synchronizer upgrade, on the operator's own schedule"
+---
+
+<div className="todo">
+
+Upgrade runbook for ChainSafe/canton-extending-mainnet#36. The upgrade is tested with the database sequencer (`SyncOperatorLsuIntegrationTest`), not yet with the BFT orderer the chart runs; run it once on a test cluster before publishing. Cancelling after the topology freeze time means revoking the announcement on the sequencer (`sequencer.topology.lsu.announcement.revoke`); the operator has no endpoint like the SVs' `/v0/admin/synchronizer/lsu/cancel`, and that path is not tested yet.
+
+</div>
+
+The operator upgrades its dedicated synchronizer with a [logical synchronizer upgrade](/global-synchronizer/production-operations/logical-synchronizer-upgrade) on its own schedule, without an SV vote. Participants move to the new nodes by themselves, and purchased traffic carries over. This page continues from [Dedicated Synchronizer Helm Deployment](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment) and uses its names.
+
+## Upgrade the synchronizer
+
+1. **Deploy the successor nodes.** Install a second `splice-global-domain` release, `dedicated-sync-1`. Copy `dedicated-sync-values.yaml` from [Deploy the synchronizer nodes](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment#deploy-the-synchronizer-nodes) and change the serial from `0` to `1` in the database names and in `externalAddress`. Remove both `ADDITIONAL_CONFIG_AUTO_INIT` entries: the app initializes the new nodes from the current ones. Expose the new sequencer's public API the same way, under a new URL such as `https://sequencer-1.dedicated.YOUR_HOSTNAME`.
+2. **Schedule the upgrade.** Create `sync-operator-lsu-values.yaml`. Pick a topology freeze time and an upgrade time, in UTC, for example `2026-11-20T10:00:00Z`. From the freeze time until the upgrade, no topology changes are possible, so you cannot admit validators. The new serial is the current one plus one. The protocol version can stay the same or go up; `sequencer.physical_synchronizer_id` in the console ends in `::<protocol version>-<serial>`, for example `::35-0`.
+
+   ```yaml
+   # The app writes the current synchronizer's state here during the upgrade.
+   pvc:
+     size: 1Gi
+     volumeStorageClass: STORAGE_CLASS
+   additionalEnvVars:
+     - name: ADDITIONAL_CONFIG_LSU
+       value: |
+         canton.sync-operator-apps.sync-operator {
+           synchronizer-nodes {
+             current.mediator.admin-api {
+               address = "dedicated-sync-0-mediator"
+               port = 5007
+             }
+             successor {
+               sequencer {
+                 admin-api {
+                   address = "dedicated-sync-1-sequencer"
+                   port = 5009
+                 }
+                 internal-api {
+                   address = "dedicated-sync-1-sequencer"
+                   port = 5008
+                 }
+                 external-public-api-url = "SUCCESSOR_SEQUENCER_PUBLIC_URL"
+               }
+               mediator.admin-api {
+                 address = "dedicated-sync-1-mediator"
+                 port = 5007
+               }
+               protocol-version = "NEW_PROTOCOL_VERSION"
+               serial = 1
+             }
+           }
+           lsu-dump-path = "/persistent-data/lsu-dump.json"
+           lsu {
+             topology-freeze-time {
+               type = "timestamp"
+               time = "TOPOLOGY_FREEZE_TIME"
+             }
+             upgrade-time {
+               type = "timestamp"
+               time = "UPGRADE_TIME"
+             }
+             new-physical-synchronizer-serial = 1
+             new-physical-synchronizer-protocol-version = "NEW_PROTOCOL_VERSION"
+           }
+         }
+   ```
+
+   `SUCCESSOR_SEQUENCER_PUBLIC_URL` is the new sequencer's URL. `STORAGE_CLASS` is your cluster's storage class. Helm replaces the whole `additionalEnvVars` list from a later values file, so keep every entry the app needs, such as an [outage allowance](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operations#ride-out-a-global-synchronizer-outage), in this one list. Apply it:
+
+   ```bash
+   helm upgrade sync-operator oci://ghcr.io/digital-asset/decentralized-canton-sync/helm/splice-sync-operator -n validator --version ${CHART_VERSION} -f sync-operator-values.yaml -f sync-operator-lsu-values.yaml --wait
+   ```
+
+3. **Let it run.** At the topology freeze time, the app announces the upgrade and prepares the successor nodes from the current ones. At the upgrade time, participants connect to the successor, and the app moves the traffic state to it. It logs `Successfully transferred LSU traffic control state to successor sequencer` once the traffic state is across.
+4. **Clean up.** The app follows the successor by itself. Only after that log line, set `sequencerAddress: "dedicated-sync-1-sequencer"` in `sync-operator-values.yaml` and upgrade the release without `sync-operator-lsu-values.yaml`. Removed earlier, the traffic state stays behind, and members get back the traffic they had used. If you remove the upgrade values but leave `sequencerAddress` on the old sequencer, the app does not start.
+   - Point `console.conf` at `dedicated-sync-1-sequencer` and `dedicated-sync-1-mediator`.
+   - Send your members the new sequencer URL. Their validator apps reapply the `url` in `extraDomains` each time they start.
+   - Uninstall `dedicated-sync-0` once every member's participant has moved to the successor.
+
+## Cancel an upgrade
+
+To cancel before the topology freeze time, upgrade the release without `sync-operator-lsu-values.yaml`; nothing has been announced yet.

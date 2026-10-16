@@ -9,7 +9,7 @@ Draft for ChainSafe/canton-extending-mainnet#37. Describes the Splice release th
 
 </div>
 
-A dedicated synchronizer can charge for traffic the way the Global Synchronizer does. Its members buy traffic for it with Canton Coin (CC) on the Global Synchronizer, and the synchronizer's operator grants that traffic on its own sequencer. This page explains how that works and how a validator buys traffic for a dedicated synchronizer. To run such a synchronizer, see [Dedicated Synchronizer Operator](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operator).
+A dedicated synchronizer can charge for traffic the way the Global Synchronizer does. Its members buy traffic for it with Canton Coin (CC) on the Global Synchronizer, and the synchronizer's operator grants that traffic on its own sequencer. This page explains how that works and how a validator buys traffic for a dedicated synchronizer. To run such a synchronizer, see [Dedicated Synchronizer Helm Deployment](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment).
 
 ## How it works
 
@@ -114,7 +114,7 @@ canton.validator-apps.validator_backend.domains.extra = [{
 
 The validator app applies this `url` to the participant's connection each time it starts. Two consequences:
 
-- After the operator [upgrades the synchronizer](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operator#upgrade-the-synchronizer), your participant moves to the new sequencer by itself, but change `url` to the new URL the operator sends you, or the next restart points it back at the old one.
+- After the operator [upgrades the synchronizer](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-upgrades), your participant moves to the new sequencer by itself, but change `url` to the new URL the operator sends you, or the next restart points it back at the old one.
 - An entry holds one sequencer URL. On a synchronizer that runs several sequencers, it replaces a connection to several of them with a connection to one.
 
 ### Buy traffic manually
@@ -139,7 +139,7 @@ Purchases are Global Synchronizer transactions, so while the Global Synchronizer
 
 To hold out longer, keep more traffic in reserve by making each top-up larger while the interval stays short. For example, to hold about a day, set `minTopupInterval` to one hour and `targetThroughput` to 24 times your actual rate. Your wallet then needs a day's traffic in CC at each top-up, since the funds check prices the whole amount.
 
-The operator can also set an outage traffic allowance that lets participants keep transacting past what they have bought; see [Ride out a Global Synchronizer outage](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operator#ride-out-a-global-synchronizer-outage). Once the Global Synchronizer is back and the operator removes the allowance, a participant that used it is refused until its purchases cover what it used. Its next top-up buys that shortfall together with a normal top-up if its wallet covers both, and otherwise pays it down one top-up at a time.
+The operator can also set an outage traffic allowance that lets participants keep transacting past what they have bought; see [Ride out a Global Synchronizer outage](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operations#ride-out-a-global-synchronizer-outage). Once the Global Synchronizer is back and the operator removes the allowance, a participant that used it is refused until its purchases cover what it used. Its next top-up buys that shortfall together with a normal top-up if its wallet covers both, and otherwise pays it down one top-up at a time.
 
 <div className="todo">
 

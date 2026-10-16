@@ -1,0 +1,73 @@
+---
+title: "Dedicated Synchronizer Operations"
+description: "Admit validators, monitor traffic grants and ride out Global Synchronizer outages on a dedicated synchronizer"
+---
+
+<div className="todo">
+
+Day-to-day part of the operator documentation for ChainSafe/canton-extending-mainnet#37, with the admission write-up for #127, the outage runbook for #129 and the trust statement from #140. Describes the Splice release that ships the sync operator app; confirm that release before publishing.
+
+</div>
+
+These are the day-to-day tasks of the operator of a dedicated synchronizer deployed as in [Dedicated Synchronizer Helm Deployment](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment). For upgrades, see [Dedicated Synchronizer Upgrades](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-upgrades). If a member's traffic is not granted, see the [runbook](/global-synchronizer/troubleshooting-guide/runbooks#runbook-dedicated-synchronizer-traffic-not-granted).
+
+## Admit a validator
+
+The synchronizer admits only participants its owner has permissioned. For background, see [Bootstrap a permissioned Synchronizer](/global-synchronizer/extension-synchronizers/synchronizer-operations#bootstrap-a-permissioned-synchronizer). To admit a validator:
+
+1. The validator sends you its participant ID, as described in [Join a dedicated synchronizer](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic#join-a-dedicated-synchronizer).
+2. Permission it in the console from [Bootstrap the synchronizer](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment#bootstrap-the-synchronizer), on the sequencer, which holds the synchronizer's owner key. On a synchronizer with several owners, enough owners to reach the threshold run this:
+
+   ```scala
+   sequencer.topology.participant_synchronizer_permissions.propose(
+     sequencer.synchronizer_id,
+     ParticipantId.tryFromProtoPrimitive("PARTICIPANT_ID"),
+     ParticipantPermission.Submission,
+   )
+   ```
+
+3. Send the validator the URL of the sequencer's public API and the synchronizer ID.
+
+The new member starts with no traffic. It can transact once it has bought traffic and the app has granted it. Its participant cannot show its traffic until it connects, so confirm the grant when it asks:
+
+```scala
+sequencer.traffic_control.traffic_state_of_members(Seq(ParticipantId.tryFromProtoPrimitive("PARTICIPANT_ID")))
+```
+
+## Monitor the traffic path
+
+Both charts expose metrics on port 10013. If you run the Prometheus operator, set `metrics.enable: true` in `dedicated-sync-values.yaml` and `sync-operator-values.yaml` to create `ServiceMonitor` resources for them, as described in [Splice Metrics Overview](/global-synchronizer/production-operations/splice-metrics-overview). Without the Prometheus operator, leave it off: the install fails on the missing resource type. These metrics show whether purchases reach the sequencer:
+
+- **Grants.** The reconcile trigger, `trigger_name="ReconcileDedicatedSequencerTrafficTrigger"`, reports `splice_trigger_latency_duration_seconds` for how long a grant takes and `splice_trigger_completed_total` for grants by `outcome`. Alert when `splice_trigger_completed_total` with `outcome="failure"` goes up for that trigger.
+- **Member traffic.** On the sequencer, `daml_sequencer_traffic_control_extra_traffic_purchased` per `member` is the limit the app has set, and `daml_sequencer_traffic_control_extra_traffic_consumed` is what the member has used.
+
+Import the [Grafana dashboards](/global-synchronizer/production-operations/splice-metrics-overview#grafana-dashboards) from the release bundle: Automations, from `validator-grafana-dashboards/`, shows the grants, and Synchronizer Fees (SV View), from `sv-grafana-dashboards/`, shows member traffic.
+
+## Trust
+
+The sequencer applies whatever traffic limit the operator sets. Nothing checks the operator's grants against purchases, so members trust the operator to grant what they paid for, and an operator could grant traffic nobody paid for. The [outage traffic allowance](#ride-out-a-global-synchronizer-outage) is the one case where the sync operator app itself grants a member traffic past what it bought.
+
+## Ride out a Global Synchronizer outage
+
+<div className="todo">
+
+Requires the outage traffic allowance, canton-network/splice-multi-sync#71 and #80 (ChainSafe/canton-extending-mainnet#129). Do not publish before it ships. If it misses the release, also remove the last sentence of [Trust](#trust) and the outage paragraph on the Dedicated Synchronizer Traffic page.
+
+</div>
+
+While the Global Synchronizer is unavailable, nobody can buy traffic, and each member runs only on what it bought before. To keep members transacting, set an outage traffic allowance: bytes each participant may use past what it has bought.
+
+- **Setting it.** Add `outage-traffic-allowance`, in bytes per participant, to the sync operator app's configuration and restart the app. The app only starts once its Scan is reachable; if yours is down, point `scanAddress` at another SV's Scan. Each participant's limit becomes its purchased total, or 0 if it has none, plus the allowance. That includes participants that join while it is set, so keep onboarding restricted. Size it from the members' traffic rates and how long the outage may last: your exposure is the allowance times the number of participants. Setting a smaller value and restarting lowers the limits again.
+- **While it is set.** Each participant keeps the full allowance on top of what it has bought, including purchases made once the Global Synchronizer is back. The app does not warn while it is set, so watching for the Global Synchronizer's return is up to you.
+- **Removing it.** Once the Global Synchronizer is back, remove the setting and restart the app, optionally after a grace period so members can buy back what they used before their limits drop. Each limit goes back to the purchased total. A participant that used the allowance is refused until its purchases cover what it used.
+- **Several operators.** Every operator sets, and later removes, the same value at about the same time. While their settings differ, limits only stay stable with a sequencer threshold above half the sequencers, for example 3 of 4.
+
+With the `splice-sync-operator` chart, set it through ad-hoc configuration, in the same `additionalEnvVars` list as the app's other entries, and upgrade the release:
+
+```yaml
+additionalEnvVars:
+  - name: ADDITIONAL_CONFIG_OUTAGE_TRAFFIC_ALLOWANCE
+    value: canton.sync-operator-apps.sync-operator.outage-traffic-allowance = 50000000
+```
+
+Members can also hold more traffic in reserve; see [When the Global Synchronizer is unavailable](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic#when-the-global-synchronizer-is-unavailable).
