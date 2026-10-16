@@ -139,11 +139,14 @@ Purchases are Global Synchronizer transactions, so while the Global Synchronizer
 
 To hold out longer, keep more traffic in reserve by making each top-up larger while the interval stays short. For example, to hold about a day, set `minTopupInterval` to one hour and `targetThroughput` to 24 times your actual rate. Your wallet then needs a day's traffic in CC at each top-up, since the funds check prices the whole amount.
 
-The operator can also set an outage traffic allowance that lets participants keep transacting past what they have bought; see [Ride out a Global Synchronizer outage](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operator#ride-out-a-global-synchronizer-outage). Once the Global Synchronizer is back and the operator removes the allowance, a participant that used it is refused until its purchases cover what it used. Its next top-up buys that shortfall together with a normal top-up if its wallet covers both, and otherwise pays it down one top-up at a time.
+The operator can also set an outage traffic allowance that lets participants keep transacting past what they have bought; see [Ride out a Global Synchronizer outage](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operator#ride-out-a-global-synchronizer-outage). Once the Global Synchronizer is back and the operator removes the allowance, a participant that used it is refused until its purchases cover what it used. Automatic top-ups pay that shortfall down by one top-up per `minTopupInterval`, within the limits you configured. To transact again sooner, either:
+
+- **Raise your top-ups for a while.** Increase `targetThroughput` so that one top-up, `targetThroughput` times `minTopupInterval`, covers the shortfall, and restart the validator app. Your wallet needs the CC for that larger top-up. Set it back once your participant transacts again.
+- **Buy the shortfall once.** [Buy traffic manually](#buy-traffic-manually) for at least the shortfall plus what you need to transact. The shortfall is `extraTrafficConsumed` minus `extraTrafficPurchased` in your participant's [traffic state](#check-your-traffic).
 
 <div className="todo">
 
-The outage allowance and the shortfall top-up are not released yet (canton-network/splice-multi-sync#71 and #80, ChainSafe/canton-extending-mainnet#129). Remove the last paragraph if they miss the release.
+The outage allowance is not released yet (canton-network/splice-multi-sync#71, ChainSafe/canton-extending-mainnet#129). Remove the last paragraph and its list if it misses the release.
 
 </div>
 
