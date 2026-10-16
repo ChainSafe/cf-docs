@@ -3,12 +3,6 @@ title: "Dedicated Synchronizer Helm Deployment"
 description: "Deploy a dedicated synchronizer whose members buy traffic with Canton Coin, using the Splice Helm charts"
 ---
 
-<div className="todo">
-
-Setup part of the operator documentation for ChainSafe/canton-extending-mainnet#37, with the multi-node layout for #106 and the migration for #100. Describes the Splice release that ships the sync operator app and the `splice-sync-operator` chart; confirm that release before publishing.
-
-</div>
-
 The operator of a dedicated synchronizer is the organization that runs it and grants the traffic its members [buy with Canton Coin](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic). This page deploys a dedicated synchronizer with the Splice Helm charts and registers it with the SVs. For day-to-day tasks, see [Dedicated Synchronizer Operations](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operations); for upgrades, see [Dedicated Synchronizer Upgrades](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-upgrades).
 
 ## Components
@@ -356,12 +350,6 @@ With the charts:
 - Each sync operator app is its own `splice-sync-operator` release, in its own namespace since the chart's resource names are fixed. Each namespace needs the app's auth secret and a PostgreSQL password secret. Set `sequencerAddress` to that node's sequencer, `participantAddress` to `participant.validator.svc.cluster.local`, `persistence.host` to the PostgreSQL's full address, and a `persistence.databaseName` of its own.
 - Validators connect to every sequencer, as in [Connect to decentralized Sequencers](/global-synchronizer/extension-synchronizers/linking-validator-multi-sync#connect-to-decentralized-sequencers). An `extraDomains` entry holds one URL, so a member that adds the synchronizer there for automatic top-ups ends up connected to one sequencer.
 
-<div className="todo">
-
-The four-node layout is tested as plain Canton config (`SyncOperatorBftIntegrationTest`), not with the charts. canton-network/splice-multi-sync#71 makes grants set limits in both directions; it then needs a sequencer threshold above half the sequencers (3 of 4) instead of 2, which is still being discussed there. Several organizations, one node each, sharing the registered operator party, is the target in ChainSafe/canton-extending-mainnet#106 and waits on DA: who owns the synchronizer's keys and the shared party, and who leads upgrades.
-
-</div>
-
 ## Bring an existing synchronizer onto paid traffic
 
 A dedicated synchronizer that already runs without paid traffic moves onto it in place, without a rebuild. In this order:
@@ -372,9 +360,3 @@ A dedicated synchronizer that already runs without paid traffic moves onto it in
 4. **Switch to paid traffic** last, since that is the step that stops anyone without purchased traffic. Deploy the sync operator app. If traffic management is off, install the app without `--wait`, since it is not ready until traffic management is on, and then turn traffic management on with the command from [Bootstrap the synchronizer](#bootstrap-the-synchronizer). The app grants each member its purchased total and sets the base traffic to zero.
 
 If traffic management was already on with limits you set by hand, the app does not lower them. It raises a member's limit only once the member's purchased total is higher, so members keep their current limits until their purchases catch up.
-
-<div className="todo">
-
-ChainSafe/canton-extending-mainnet#100: decide whether hand-set limits stay until purchases catch up, as the app does today, or members pay from the switch. canton-network/splice-multi-sync#71 makes the trigger set limits to the purchased total in both directions, which would refuse members whose consumption is ahead of their purchases. Then test the migration on LocalNet.
-
-</div>

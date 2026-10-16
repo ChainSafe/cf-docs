@@ -3,12 +3,6 @@ title: "Dedicated Synchronizer Operations"
 description: "Admit validators, monitor traffic grants and ride out Global Synchronizer outages on a dedicated synchronizer"
 ---
 
-<div className="todo">
-
-Day-to-day part of the operator documentation for ChainSafe/canton-extending-mainnet#37, with the admission write-up for #127, the outage runbook for #129 and the trust statement from #140. Describes the Splice release that ships the sync operator app; confirm that release before publishing.
-
-</div>
-
 These are the day-to-day tasks of the operator of a dedicated synchronizer deployed as in [Dedicated Synchronizer Helm Deployment](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment). For upgrades, see [Dedicated Synchronizer Upgrades](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-upgrades). If a member's traffic is not granted, see the [runbook](/global-synchronizer/troubleshooting-guide/runbooks#runbook-dedicated-synchronizer-traffic-not-granted).
 
 ## Admit a validator
@@ -48,12 +42,6 @@ Import the [Grafana dashboards](/global-synchronizer/production-operations/splic
 The sequencer applies whatever traffic limit the operator sets. Nothing checks the operator's grants against purchases, so members trust the operator to grant what they paid for, and an operator could grant traffic nobody paid for. The [outage traffic allowance](#ride-out-a-global-synchronizer-outage) is the one case where the sync operator app itself grants a member traffic past what it bought.
 
 ## Ride out a Global Synchronizer outage
-
-<div className="todo">
-
-Requires the outage traffic allowance, canton-network/splice-multi-sync#71 and #80 (ChainSafe/canton-extending-mainnet#129). Do not publish before it ships. If it misses the release, also remove the last sentence of [Trust](#trust) and the outage paragraph on the Dedicated Synchronizer Traffic page.
-
-</div>
 
 While the Global Synchronizer is unavailable, nobody can buy traffic, and each member runs only on what it bought before. To keep members transacting, set an outage traffic allowance: bytes each participant may use past what it has bought.
 

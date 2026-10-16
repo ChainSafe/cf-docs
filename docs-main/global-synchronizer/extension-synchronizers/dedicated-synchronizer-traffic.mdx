@@ -3,12 +3,6 @@ title: "Dedicated Synchronizer Traffic"
 description: "Pay for traffic on a registered dedicated synchronizer with Canton Coin burned on the Global Synchronizer"
 ---
 
-<div className="todo">
-
-Draft for ChainSafe/canton-extending-mainnet#37. Describes the Splice release that ships the sync operator app; confirm that release before publishing.
-
-</div>
-
 A dedicated synchronizer can charge for traffic the way the Global Synchronizer does. Its members buy traffic for it with Canton Coin (CC) on the Global Synchronizer, and the synchronizer's operator grants that traffic on its own sequencer. This page explains how that works and how a validator buys traffic for a dedicated synchronizer. To run such a synchronizer, see [Dedicated Synchronizer Helm Deployment](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment).
 
 ## How it works
@@ -76,12 +70,6 @@ The operator admits only participants it has permissioned, and a new member has 
 
 Then add the synchronizer to your validator's configuration, with the same alias, as shown in [Automatic top-ups](#automatic-top-ups), so the validator stays connected and tops up by itself. Add it only after this first grant: the validator app connects to every synchronizer in `extraDomains` as part of starting up, and connecting needs traffic.
 
-<div className="todo">
-
-Simplify once a purchase made before a participant joins is granted when it joins (ChainSafe/canton-extending-mainnet#116, canton-network/splice-multi-sync#71); the order then becomes buy, then connect.
-
-</div>
-
 ## Buy traffic
 
 ### Automatic top-ups
@@ -140,12 +128,6 @@ Purchases are Global Synchronizer transactions, so while the Global Synchronizer
 To hold out longer, keep more traffic in reserve by making each top-up larger while the interval stays short. For example, to hold about a day, set `minTopupInterval` to one hour and `targetThroughput` to 24 times your actual rate. Your wallet then needs a day's traffic in CC at each top-up, since the funds check prices the whole amount.
 
 The operator can also set an outage traffic allowance that lets participants keep transacting past what they have bought; see [Ride out a Global Synchronizer outage](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operations#ride-out-a-global-synchronizer-outage). Once the Global Synchronizer is back and the operator removes the allowance, a participant that used it is refused until its purchases cover what it used. Its next top-up buys that shortfall together with a normal top-up if its wallet covers both, and otherwise pays it down one top-up at a time.
-
-<div className="todo">
-
-The outage allowance and the shortfall top-up are not released yet (canton-network/splice-multi-sync#71 and #80, ChainSafe/canton-extending-mainnet#129). Remove the last paragraph if they miss the release.
-
-</div>
 
 ## Trust
 

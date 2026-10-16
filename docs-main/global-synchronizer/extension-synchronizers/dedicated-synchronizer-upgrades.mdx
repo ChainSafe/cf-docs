@@ -3,12 +3,6 @@ title: "Dedicated Synchronizer Upgrades"
 description: "Upgrade a dedicated synchronizer with a logical synchronizer upgrade, on the operator's own schedule"
 ---
 
-<div className="todo">
-
-Upgrade runbook for ChainSafe/canton-extending-mainnet#36. The upgrade is tested with the database sequencer (`SyncOperatorLsuIntegrationTest`), not yet with the BFT orderer the chart runs; run it once on a test cluster before publishing. Cancelling after the topology freeze time means revoking the announcement on the sequencer (`sequencer.topology.lsu.announcement.revoke`); the operator has no endpoint like the SVs' `/v0/admin/synchronizer/lsu/cancel`, and that path is not tested yet.
-
-</div>
-
 The operator upgrades its dedicated synchronizer with a [logical synchronizer upgrade](/global-synchronizer/production-operations/logical-synchronizer-upgrade) on its own schedule, without an SV vote. Participants move to the new nodes by themselves, and purchased traffic carries over. This page continues from [Dedicated Synchronizer Helm Deployment](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment) and uses its names.
 
 ## Upgrade the synchronizer
