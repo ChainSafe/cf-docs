@@ -156,13 +156,15 @@ Draft for ChainSafe/canton-extending-mainnet#37. Confirm the Splice release that
 
 The following steps are required to register a dedicated synchronizer:
 
-1.  Receive from the synchronizer's operator its synchronizer ID and operator party ID, and agree among the SVs on a traffic discount, if any.
-2.  Start a governance vote. To do so, create a new vote request in the SV web UI under the `Governance` tab. Select the "Register Dedicated Synchronizer" name, then enter the synchronizer ID, the operator party as the synchronizer operator, and the traffic discount: the factor that multiplies the synchronizer's traffic price, greater than 0 and at most 1, where 1 is the full price. The form refuses a synchronizer ID that is already registered.
-3.  Wait for the vote request to get approved and executed. Once that happens, Scan serves the registration at `/v0/synchronizers/{synchronizer_id}/registration`, and validators can buy traffic for the synchronizer.
+1.  Receive from the synchronizer's operator its synchronizer ID and operator party ID, and agree among the SVs on its traffic discount.
+2.  Start a governance vote. To do so, create a new vote request in the SV web UI under the `Governance` tab. Select the "Register Dedicated Synchronizer" name. Enter the synchronizer ID, and the operator party as the synchronizer operator. Enter the traffic discount: the factor that multiplies the synchronizer's traffic price, greater than 0 and at most 1, where 1 means no discount.
+3.  Wait for the vote request to get approved and executed. Once that happens, Scan serves the registration at `/api/scan/v0/synchronizers/{synchronizer_id}/registration`, and validators can buy traffic for the synchronizer.
+
+The form refuses a synchronizer ID that is already registered or that another open proposal registers. The ledger does not check this, so a second registration of the same ID would succeed and have to be offboarded.
 
 To change the discount later, vote with "Set Dedicated Synchronizer Parameters". To stop purchases for a synchronizer, vote with "Offboard Dedicated Synchronizer", which archives its registration. Traffic already granted on the synchronizer is not affected.
 
-A synchronizer in `requiredSynchronizers`, such as the Global Synchronizer itself, cannot be bought for through a registration, so it never gets a discount.
+Purchases for a synchronizer in `requiredSynchronizers`, such as the Global Synchronizer itself, cannot use a registration, so they never get a discount.
 
 ## Determining good [synchronizer traffic parameters](/global-synchronizer/deployment/synchronizer-traffic)
 

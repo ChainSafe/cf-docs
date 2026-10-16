@@ -5,11 +5,11 @@ description: "Pay for traffic on a registered dedicated synchronizer with Canton
 
 <div className="todo">
 
-Draft for ChainSafe/canton-extending-mainnet#37. Describes the Splice release that ships the sync operator app; confirm that release, and check every claim against it, before publishing.
+Draft for ChainSafe/canton-extending-mainnet#37. Describes the Splice release that ships the sync operator app; confirm that release before publishing.
 
 </div>
 
-A dedicated synchronizer can charge for traffic the way the Global Synchronizer does. Its members buy traffic for it with Canton Coin (CC) on the Global Synchronizer, and the synchronizer's operator grants that traffic on its own sequencer. This page explains how that works and how a validator buys traffic for a dedicated synchronizer. To run such a synchronizer, see [Sync Operator](/global-synchronizer/extension-synchronizers/sync-operator).
+A dedicated synchronizer can charge for traffic the way the Global Synchronizer does. Its members buy traffic for it with Canton Coin (CC) on the Global Synchronizer, and the synchronizer's operator grants that traffic on its own sequencer. This page explains how that works and how a validator buys traffic for a dedicated synchronizer. To run such a synchronizer, see [Dedicated Synchronizer Operator](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operator).
 
 ## How it works
 
@@ -51,10 +51,10 @@ The operator's mediators have unlimited traffic, since they cannot buy any. Othe
 
 ## Join a dedicated synchronizer
 
-A registered dedicated synchronizer is permissioned, and a new member has no traffic on it. Connecting already costs traffic, because the participant sends its parties and package vetting to the synchronizer when it connects. So a validator joins in this order:
+The operator admits only participants it has permissioned, and a new member has no traffic on the synchronizer. Connecting already costs traffic, because the participant sends its parties and package vetting to the synchronizer when it connects. So a validator joins in this order, running the commands in its participant's [Canton console](/global-synchronizer/reference/canton-console-reference#participant-console):
 
-1. **Ask the operator for access.** Send your participant ID to the operator. The operator permissions it and sends you the URL of the synchronizer's sequencer and the synchronizer ID.
-2. **Register the connection.** Register the synchronizer with a handshake but do not connect yet. The handshake makes your participant a member of the synchronizer and costs no traffic. For example, in the Canton console:
+1. **Ask the operator for access.** Send your participant ID, which `participant.id.toProtoPrimitive` prints. The operator permissions it and sends you the URL of the synchronizer's sequencer and the synchronizer ID.
+2. **Register the connection.** Register the synchronizer with a handshake but do not connect yet. The handshake makes your participant a member of the synchronizer and costs no traffic. `manualConnect = true` keeps a restart from connecting before you have traffic:
 
    ```scala
    participant.synchronizers.register_by_config(
@@ -62,18 +62,19 @@ A registered dedicated synchronizer is permissioned, and a new member has no tra
        "dedicated",
        SequencerAlias.Default,
        "https://sequencer.dedicated.example.com",
+       manualConnect = true,
      )
    )
    ```
 
-3. **Buy traffic** for your participant on the synchronizer, as described in [Buy traffic manually](#buy-traffic-manually).
-4. **Connect** once the operator has granted the purchase:
+3. **Buy traffic** for your participant on the synchronizer, as described in [Buy traffic manually](#buy-traffic-manually). Buy only after step 2: the operator's app grants a purchase only to a participant the synchronizer already knows, and a purchase made earlier waits for your next one. Once the request's [status](/reference/splice-wallet-api-external/post-v0walletbuy-traffic-requests:tracking_idstatus) is completed, ask the operator to confirm the grant. They see it on their sequencer; your participant only shows its traffic once it is connected.
+4. **Connect:**
 
    ```scala
    participant.synchronizers.reconnect("dedicated")
    ```
 
-   To stay connected and topped up, then add the synchronizer to your validator's configuration as shown in [Automatic top-ups](#automatic-top-ups). Add it only after this first purchase is granted: the validator app connects to every synchronizer in `extraDomains` when it starts, and connecting needs traffic.
+Then add the synchronizer to your validator's configuration, with the same alias, as shown in [Automatic top-ups](#automatic-top-ups), so the validator stays connected and tops up by itself. Add it only after this first grant: the validator app connects to every synchronizer in `extraDomains` as part of starting up, and connecting needs traffic.
 
 <div className="todo">
 
@@ -85,7 +86,7 @@ Simplify once a purchase made before a participant joins is granted when it join
 
 ### Automatic top-ups
 
-The validator app's [automatic top-ups](/global-synchronizer/deployment/validator-kubernetes#configuring-automatic-traffic-purchases) work for dedicated synchronizers too, with the same `targetThroughput` and `minTopupInterval` settings, set per synchronizer. The validator reads the synchronizer's registration from Scan for each top-up and skips the top-up while Scan has none. The CC comes from the validator's wallet, as for the Global Synchronizer.
+The validator app's [automatic top-ups](/global-synchronizer/deployment/validator-kubernetes#configuring-automatic-traffic-purchases) work for dedicated synchronizers too, with the same `targetThroughput` and `minTopupInterval` settings, set per synchronizer. They only run while the participant is connected to the synchronizer, which is why the first purchase is manual. The validator reads the synchronizer's registration from Scan for each top-up and skips the top-up while Scan has none. The CC comes from the validator's wallet, as for the Global Synchronizer.
 
 With the `splice-validator` Helm chart, set them on the synchronizer's entry in `extraDomains`:
 
@@ -111,17 +112,26 @@ canton.validator-apps.validator_backend.domains.extra = [{
 }]
 ```
 
-The validator app connects to every synchronizer in `extraDomains` when it starts.
+The validator app applies this `url` to the participant's connection each time it starts. Two consequences:
+
+- After the operator [upgrades the synchronizer](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operator#upgrade-the-synchronizer), your participant moves to the new sequencer by itself, but change `url` to the new URL the operator sends you, or the next restart points it back at the old one.
+- An entry holds one sequencer URL. On a synchronizer that runs several sequencers, it replaces a connection to several of them with a connection to one.
 
 ### Buy traffic manually
 
 To buy traffic once, send a [buy traffic request](/reference/splice-wallet-api-external/post-v0walletbuy-traffic-requests) to the wallet API with `domain_id` set to the dedicated synchronizer's ID and `receiving_validator_party_id` set to a party hosted on the participant that should receive the traffic.
 
-To check that a synchronizer is registered, look up its registration on Scan at `GET /v0/synchronizers/{synchronizer_id}/registration`, or through your validator's scan proxy at `GET /v0/scan-proxy/synchronizers/{synchronizer_id}/registration`. Both return 404 for a synchronizer that is not registered.
+To check that a synchronizer is registered, look up its registration on Scan at `GET /api/scan/v0/synchronizers/{synchronizer_id}/registration`, or through your validator's scan proxy at `GET /api/validator/v0/scan-proxy/synchronizers/{synchronizer_id}/registration`. Both return 404 for a synchronizer that is not registered.
 
 ### Check your traffic
 
-Read your participant's traffic on the dedicated synchronizer from the participant itself, for example with `participant.traffic_control.traffic_state(synchronizerId)` in the Canton console. Scan's member traffic status endpoint serves the Global Synchronizer only and rejects a dedicated synchronizer's ID.
+Once connected, read your participant's traffic on the dedicated synchronizer in its console:
+
+```scala
+participant.traffic_control.traffic_state(participant.synchronizers.id_of("dedicated"))
+```
+
+Scan's member traffic status endpoint serves the Global Synchronizer only and rejects a dedicated synchronizer's ID.
 
 ## When the Global Synchronizer is unavailable
 
@@ -129,7 +139,7 @@ Purchases are Global Synchronizer transactions, so while the Global Synchronizer
 
 To hold out longer, keep more traffic in reserve by making each top-up larger while the interval stays short. For example, to hold about a day, set `minTopupInterval` to one hour and `targetThroughput` to 24 times your actual rate. Your wallet then needs a day's traffic in CC at each top-up, since the funds check prices the whole amount.
 
-The operator can also set an outage traffic allowance that lets participants keep transacting past what they have bought; see [Ride out a Global Synchronizer outage](/global-synchronizer/extension-synchronizers/sync-operator#ride-out-a-global-synchronizer-outage). Once the Global Synchronizer is back and the operator removes the allowance, a participant that used it is refused until its purchases cover what it used. Its next top-up buys that shortfall together with a normal top-up if its wallet covers both.
+The operator can also set an outage traffic allowance that lets participants keep transacting past what they have bought; see [Ride out a Global Synchronizer outage](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operator#ride-out-a-global-synchronizer-outage). Once the Global Synchronizer is back and the operator removes the allowance, a participant that used it is refused until its purchases cover what it used. Its next top-up buys that shortfall together with a normal top-up if its wallet covers both, and otherwise pays it down one top-up at a time.
 
 <div className="todo">
 

@@ -470,7 +470,7 @@
               "global-synchronizer/extension-synchronizers/private-validators",
               "global-synchronizer/extension-synchronizers/synchronizer-operations",
               "global-synchronizer/extension-synchronizers/synchronizer-monitoring",
-              "global-synchronizer/extension-synchronizers/sync-operator"
+              "global-synchronizer/extension-synchronizers/dedicated-synchronizer-operator"
             ]
           },
           {
