@@ -121,14 +121,6 @@ participant.traffic_control.traffic_state(participant.synchronizers.id_of("dedic
 
 Scan's member traffic status endpoint serves the Global Synchronizer only and rejects a dedicated synchronizer's ID.
 
-## When the Global Synchronizer is unavailable
-
-Purchases are Global Synchronizer transactions, so while the Global Synchronizer is unavailable nobody can buy traffic for a dedicated synchronizer. A participant keeps transacting on what it has already bought, which with automatic top-ups is about one top-up.
-
-To hold out longer, keep more traffic in reserve by making each top-up larger while the interval stays short. For example, to hold about a day, set `minTopupInterval` to one hour and `targetThroughput` to 24 times your actual rate. Your wallet then needs a day's traffic in CC at each top-up, since the funds check prices the whole amount.
-
-The operator can also set an outage traffic allowance that lets participants keep transacting past what they have bought; see [Ride out a Global Synchronizer outage](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operations#ride-out-a-global-synchronizer-outage). Once the Global Synchronizer is back and the operator removes the allowance, a participant that used it is refused until its purchases cover what it used. Its next top-up buys that shortfall together with a normal top-up if its wallet covers both, and otherwise pays it down one top-up at a time.
-
 ## Trust
 
 The dedicated synchronizer's sequencer applies whatever traffic limit the operator sets. Nothing checks those limits against what members bought, so members rely on the operator to grant the traffic they paid for.
