@@ -93,6 +93,8 @@ If `availableTraffic` is 0 or traffic limits are exhausted, purchase traffic or 
    ```
 3. Check that the validator has sufficient Canton Coin balance to fund traffic purchases.
 
+On a dedicated synchronizer, buy with its synchronizer ID as `domain_id`, and set up top-ups as described in [Dedicated Synchronizer Traffic](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic).
+
 **Verification:** Submit a test transaction and confirm it succeeds.
 
 ---
@@ -204,3 +206,35 @@ If `latest_block_height` has not changed in several minutes and `catching_up` is
 4. If the stall is network-wide (multiple SV nodes are not signing), coordinate with other SV operators through the `#validator-operations` Slack channel.
 
 **Verification:** Block height is advancing and the interval between blocks has returned to normal (typically a few seconds).
+
+---
+
+## Runbook: Dedicated Synchronizer Traffic Not Granted
+
+**Detection:** This applies to operators of a [dedicated synchronizer](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment). A member bought traffic for your synchronizer, but its traffic limit on your sequencer stays below its purchases. Or transactions on the synchronizer time out for every member, which happens when the mediator has no traffic.
+
+**Assessment:**
+
+```bash
+# Check that the sync operator app is running and ready
+kubectl get pods -n validator -l app=sync-operator-app
+# Check what it did with recent purchases
+kubectl logs -n validator deployment/sync-operator-app | grep -E 'Updated extra traffic limit|No traffic state found'
+```
+
+In the Canton console on your sequencer, compare the member's limit with its purchases:
+
+```scala
+sequencer.traffic_control.traffic_state_of_members(Seq(ParticipantId.tryFromProtoPrimitive("PARTICIPANT_ID")))
+```
+
+**Action:**
+
+- If the app is not ready, its log names the startup step it waits on, for example traffic management not yet on, or Scan or the participant out of reach. Fix that step first. Until the app runs, the mediator has no traffic either.
+- If the log shows `No traffic state found for member`, the member bought traffic before it joined the synchronizer. Restart the app, which checks every purchase again when it starts. A new purchase by the member also grants the earlier one.
+  ```bash
+  kubectl rollout restart deployment/sync-operator-app -n validator
+  ```
+- If grants fail, check the sequencer's health as described in [Synchronizer Monitoring](/global-synchronizer/extension-synchronizers/synchronizer-monitoring).
+
+**Verification:** The member's `extraTrafficPurchased` on the sequencer matches its purchased total, and its transactions go through.
