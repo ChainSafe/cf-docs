@@ -1,0 +1,50 @@
+---
+title: "Dedicated Synchronizer Operations"
+description: "Admit validators and monitor traffic on a dedicated synchronizer"
+---
+
+These are the day-to-day tasks of the operator of a dedicated synchronizer deployed as in [Dedicated Synchronizer Helm Deployment](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment). For upgrades, see [Dedicated Synchronizer Upgrades](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-upgrades). If a member's traffic is not granted, see the [runbook](/global-synchronizer/troubleshooting-guide/runbooks#runbook-dedicated-synchronizer-traffic-not-granted).
+
+## Admit a validator
+
+The synchronizer admits only participants its owner has permissioned. For background, see [Bootstrap a permissioned Synchronizer](/global-synchronizer/extension-synchronizers/synchronizer-operations#bootstrap-a-permissioned-synchronizer). Every participant you admit gets unlimited traffic, and the paymaster pays for what it uses. To admit a validator:
+
+1. The validator sends you its participant ID, as described in [Join a dedicated synchronizer](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic#join-a-dedicated-synchronizer).
+2. Permission it in the console from [Bootstrap the synchronizer](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment#bootstrap-the-synchronizer), on the sequencer, which holds the synchronizer's owner key. On a synchronizer with several owners, enough owners to reach the threshold run this, each with `synchronize = None` as a further argument:
+
+   ```scala
+   sequencer.topology.participant_synchronizer_permissions.propose(
+     sequencer.synchronizer_id,
+     ParticipantId.tryFromProtoPrimitive("PARTICIPANT_ID"),
+     ParticipantPermission.Submission,
+   )
+   ```
+
+3. Wait for the sync operator app to set the participant's traffic limit. It looks for new permissions every 30 seconds and logs each limit it sets. For a participant that has not connected yet, the message ends in `to the maximum before it joined`:
+
+   ```bash
+   kubectl logs -n dedicated-sync deployment/sync-operator-app | grep -i 'traffic limit for'
+   ```
+
+4. Send the validator the URL of the sequencer's public API.
+
+Once the participant has connected, read its traffic on the sequencer. The sequencer reports no traffic state for a participant that has not connected yet:
+
+```scala
+sequencer.traffic_control.traffic_state_of_members(Seq(ParticipantId.tryFromProtoPrimitive("PARTICIPANT_ID")))
+```
+
+`extraTrafficPurchased` is the participant's limit, 9223372036854775807 for unlimited traffic, and `extraTrafficConsumed` is the traffic it has used.
+
+## Monitor traffic
+
+Both charts expose metrics on port 10013. If you run the Prometheus operator, set `metrics.enable: true` in `dedicated-sync-values.yaml` and `sync-operator-values.yaml` to create `ServiceMonitor` resources for them, as described in [Splice Metrics Overview](/global-synchronizer/production-operations/splice-metrics-overview). Without the Prometheus operator, leave it off: the install fails on the missing resource type. These metrics show the app's grants and the traffic the members use:
+
+- **Grants.** The trigger that sets the limits, `trigger_name="UnlimitedTrafficTrigger"`, reports `splice_trigger_latency_duration_seconds` with `trigger_type="taskbased"` for how long a grant takes and `splice_trigger_completed_total` for grants by `outcome`. Alert when `splice_trigger_completed_total` with `outcome="failure"` goes up for that trigger.
+- **Member traffic.** On the sequencer, `daml_sequencer_traffic_control_extra_traffic_consumed` per `member` is the traffic the member has used, and `daml_sequencer_traffic_control_extra_traffic_purchased` is its limit. The base traffic is zero, so the consumed value is all the traffic charged to a member. The paymaster pays for what the participants consume.
+
+Import the [Grafana dashboards](/global-synchronizer/production-operations/splice-metrics-overview#grafana-dashboards) from the release bundle: Automations, from `validator-grafana-dashboards/`, shows the grants, and Synchronizer Fees (SV View), from `sv-grafana-dashboards/`, shows member traffic.
+
+## Trust
+
+The sequencer applies whatever traffic limit the operator sets, and the sync operator app gives every participant you admit unlimited traffic without waiting for a payment. The paymaster pays afterwards on the Global Synchronizer, and nothing on the ledger checks what it pays against what the synchronizer's members used. The SVs can offboard a synchronizer whose paymaster does not pay.

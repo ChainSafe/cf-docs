@@ -144,6 +144,24 @@ double-minting of rewards occurs.
 For details on how traffic-based rewards work, see
 [Traffic-Based App Rewards](/global-synchronizer/splice-fundamentals/traffic-based-app-rewards).
 
+## Registering a dedicated synchronizer
+
+On a registered dedicated synchronizer, a paymaster pays for the synchronizer's traffic with CC on the Global Synchronizer; see [Dedicated Synchronizer Traffic](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic).
+
+The following steps are required to register a dedicated synchronizer:
+
+1.  Receive from the synchronizer's operator its synchronizer ID and the paymaster's party ID, and agree among the SVs on its maximum app activity weight and maximum asset activity weight.
+2.  Start a governance vote. To do so, create a new vote request in the SV web UI under the `Governance` tab. Select the "Register Dedicated Synchronizer" name. Enter the synchronizer ID and the paymaster. Enter the two maximum activity weights: the highest weights that the paymaster's purchases may state. Each is at least 0, and the form prefills 1.0.
+3.  Wait for the vote request to get approved and executed. Once that happens, the paymaster can pay for the synchronizer's traffic.
+
+The form refuses a synchronizer ID that is already registered or that another open proposal registers. The ledger does not check this, so a second registration of the same ID would succeed and have to be offboarded.
+
+To change the paymaster or the weights later, vote with "Update Dedicated Synchronizer Registration". To stop purchases for a synchronizer, vote with "Offboard Dedicated Synchronizer", which archives its registration. Both votes name the registration's contract, which the form lists once you enter the synchronizer ID. An update replaces that contract, so another open vote that names the replaced contract fails.
+
+Offboarding stops the paymaster's purchases. It does not change the traffic limits on the dedicated synchronizer, which its operator sets.
+
+A registration for a synchronizer in `requiredSynchronizers`, such as the Global Synchronizer itself, cannot be used: purchases with it are refused.
+
 ## Determining good [synchronizer traffic parameters](/global-synchronizer/deployment/synchronizer-traffic)
 
 SVs are responsible for deciding on suitable synchronizer traffic parameters. In the following we describe ways for determining good values for some of these parameters.
