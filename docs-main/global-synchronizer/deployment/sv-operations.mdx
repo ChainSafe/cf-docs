@@ -146,19 +146,21 @@ For details on how traffic-based rewards work, see
 
 ## Registering a dedicated synchronizer
 
-Validators can buy traffic for a dedicated synchronizer with CC once the SVs have registered it; see [Dedicated Synchronizer Traffic](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic).
+On a registered dedicated synchronizer, a paymaster pays for the synchronizer's traffic with CC on the Global Synchronizer; see [Dedicated Synchronizer Traffic](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic).
 
 The following steps are required to register a dedicated synchronizer:
 
-1.  Receive from the synchronizer's operator its synchronizer ID and operator party ID, and agree among the SVs on its traffic discount.
-2.  Start a governance vote. To do so, create a new vote request in the SV web UI under the `Governance` tab. Select the "Register Dedicated Synchronizer" name. Enter the synchronizer ID, and the operator party as the synchronizer operator. Enter the traffic discount: the factor that multiplies the synchronizer's traffic price, greater than 0 and at most 1, where 1 means no discount.
-3.  Wait for the vote request to get approved and executed. Once that happens, Scan serves the registration at `/api/scan/v0/synchronizers/{synchronizer_id}/registration`, and validators can buy traffic for the synchronizer.
+1.  Receive from the synchronizer's operator its synchronizer ID and the paymaster's party ID, and agree among the SVs on its maximum app activity weight and maximum asset activity weight.
+2.  Start a governance vote. To do so, create a new vote request in the SV web UI under the `Governance` tab. Select the "Register Dedicated Synchronizer" name. Enter the synchronizer ID and the paymaster. Enter the two maximum activity weights: the highest weights that the paymaster's purchases may state. Each is at least 0, and the form prefills 1.0.
+3.  Wait for the vote request to get approved and executed. Once that happens, the paymaster can pay for the synchronizer's traffic.
 
 The form refuses a synchronizer ID that is already registered or that another open proposal registers. The ledger does not check this, so a second registration of the same ID would succeed and have to be offboarded.
 
-To change the discount later, vote with "Set Dedicated Synchronizer Parameters". To stop purchases for a synchronizer, vote with "Offboard Dedicated Synchronizer", which archives its registration. Traffic already granted on the synchronizer is not affected.
+To change the paymaster or the weights later, vote with "Update Dedicated Synchronizer Registration". To stop purchases for a synchronizer, vote with "Offboard Dedicated Synchronizer", which archives its registration. Both votes name the registration's contract, which the form lists once you enter the synchronizer ID. An update replaces that contract, so another open vote that names the replaced contract fails.
 
-Purchases for a synchronizer in `requiredSynchronizers`, such as the Global Synchronizer itself, cannot use a registration, so they never get a discount.
+Offboarding stops the paymaster's purchases. It does not change the traffic limits on the dedicated synchronizer, which its operator sets.
+
+A registration for a synchronizer in `requiredSynchronizers`, such as the Global Synchronizer itself, cannot be used: purchases with it are refused.
 
 ## Determining good [synchronizer traffic parameters](/global-synchronizer/deployment/synchronizer-traffic)
 
@@ -549,5 +551,6 @@ Here an example of how to unvet specific versions of a package:
 <Note>
 Unvetting is only supported for SVs and SV validators and does not unvet dependencies for now.
 </Note>
+
 
 {/* COPIED_END */}

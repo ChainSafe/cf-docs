@@ -93,7 +93,7 @@ If `availableTraffic` is 0 or traffic limits are exhausted, purchase traffic or 
    ```
 3. Check that the validator has sufficient Canton Coin balance to fund traffic purchases.
 
-On a dedicated synchronizer, buy with its synchronizer ID as `domain_id`, and set up top-ups as described in [Dedicated Synchronizer Traffic](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic).
+On a dedicated synchronizer with a paymaster, members do not buy traffic: the operator gives them unlimited traffic. If your participant has no traffic there, contact the synchronizer's operator; see [Dedicated Synchronizer Traffic](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic).
 
 **Verification:** Submit a test transaction and confirm it succeeds.
 
@@ -211,30 +211,32 @@ If `latest_block_height` has not changed in several minutes and `catching_up` is
 
 ## Runbook: Dedicated Synchronizer Traffic Not Granted
 
-**Detection:** This applies to operators of a [dedicated synchronizer](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment). A member bought traffic for your synchronizer, but its traffic limit on your sequencer stays below its purchases. Or transactions on the synchronizer time out for every member, which happens when the mediator has no traffic.
+**Detection:** This applies to operators of a [dedicated synchronizer](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment). A participant you admitted reports that it has no traffic on your synchronizer or cannot connect to it. Or transactions on the synchronizer time out for every member, which happens when the mediator has no traffic.
 
 **Assessment:**
 
 ```bash
 # Check that the sync operator app is running and ready
-kubectl get pods -n validator -l app=sync-operator-app
-# Check what it did with recent purchases
-kubectl logs -n validator deployment/sync-operator-app | grep -E 'Updated extra traffic limit|No traffic state found'
+kubectl get pods -n dedicated-sync -l app=sync-operator-app
+# Check which members it has set a traffic limit for since it started
+kubectl logs -n dedicated-sync deployment/sync-operator-app | grep -i 'traffic limit for'
 ```
 
-In the Canton console on your sequencer, compare the member's limit with its purchases:
+In the Canton console on your sequencer, check that the participant has a permission and, once it has connected, read its limit:
 
 ```scala
+sequencer.topology.participant_synchronizer_permissions.find(
+  sequencer.synchronizer_id,
+  ParticipantId.tryFromProtoPrimitive("PARTICIPANT_ID"),
+)
 sequencer.traffic_control.traffic_state_of_members(Seq(ParticipantId.tryFromProtoPrimitive("PARTICIPANT_ID")))
 ```
 
 **Action:**
 
-- If the app is not ready, its log names the startup step it waits on, for example traffic management not yet on, or Scan or the participant out of reach. Fix that step first. Until the app runs, the mediator has no traffic either.
-- If the log shows `No traffic state found for member`, the member bought traffic before it joined the synchronizer. Restart the app, which checks every purchase again when it starts. A new purchase by the member also grants the earlier one.
-  ```bash
-  kubectl rollout restart deployment/sync-operator-app -n validator
-  ```
+- If the app is not ready, its log names the startup check it waits on or failed, for example onboarding not yet restricted, traffic management not yet on, or a protocol version below 37. Fix that first. Until the app has run once, the mediator has no traffic either.
+- If the participant has no permission, admit it as described in [Admit a validator](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-operations#admit-a-validator). The app gives traffic only to participants with a permission.
+- On a synchronizer with several nodes, a limit takes effect only once enough sync operator apps to reach the sequencer threshold have set it. Check that the other nodes' apps are running.
 - If grants fail, check the sequencer's health as described in [Synchronizer Monitoring](/global-synchronizer/extension-synchronizers/synchronizer-monitoring).
 
-**Verification:** The member's `extraTrafficPurchased` on the sequencer matches its purchased total, and its transactions go through.
+**Verification:** The member's `extraTrafficPurchased` on the sequencer is 9223372036854775807, and its transactions go through.

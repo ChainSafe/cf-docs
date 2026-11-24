@@ -62,8 +62,8 @@ Organizations deploying or planning to deploy a dedicated synchronizer must unde
   to the Global Synchronizer for accounting and settlement purposes. This connection is the mechanism by which fees are calculated
   and CC burn obligations are fulfilled.
 
-Once the SVs have registered a dedicated synchronizer, its validators already pay for traffic this way: they burn CC on the
-Global Synchronizer to buy it. See [Dedicated Synchronizer Traffic](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic),
+Once the SVs have registered a dedicated synchronizer, a paymaster pays for the synchronizer's traffic by burning CC on the
+Global Synchronizer. See [Dedicated Synchronizer Traffic](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic),
 and [Dedicated Synchronizer Helm Deployment](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment) to run one.
 
 
@@ -121,6 +121,6 @@ Dedicated synchronizers and the Global Synchronizer are complementary:
 ## Next Steps
 
 - [Dedicated Synchronizer Traffic](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-traffic): Paying for dedicated synchronizer traffic with Canton Coin
-- [Dedicated Synchronizer Helm Deployment](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment): Running a dedicated synchronizer whose members pay for traffic
+- [Dedicated Synchronizer Helm Deployment](/global-synchronizer/extension-synchronizers/dedicated-synchronizer-deployment): Running a dedicated synchronizer whose traffic a paymaster pays for
 - [Hybrid Synchronizer Pattern](/global-synchronizer/extension-synchronizers/hybrid-synchronizer-pattern): Combining public and dedicated synchronizers
 - [Linking Validators](/global-synchronizer/extension-synchronizers/linking-validator-multi-sync): Multi-synchronizer validator configuration
